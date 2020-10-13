@@ -565,7 +565,7 @@ void make_gaussian_kernel(float sigma, float **kernel, int *windowsize)
 behavior read_pgm_image(in char *infilename, out unsigned char **image, out int *rows,
 	out int *cols)
 {
-	/*change*/
+	
 int main(void)
 {
 	FILE *fp;
