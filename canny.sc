@@ -67,8 +67,8 @@
 
 #define BOOSTBLURFACTOR 90.0
 
-int read_pgm_image(char *infilename, unsigned char **image, int *rows,
-	int *cols);
+behavior read_pgm_image(char *, unsigned char **, int *,
+	int *);
 int write_pgm_image(char *outfilename, unsigned char *image, int rows,
 	int cols, char *comment, int maxval);
 
@@ -562,8 +562,10 @@ void make_gaussian_kernel(float sigma, float **kernel, int *windowsize)
 * All comments in the header are discarded in the process of reading the
 * image. Upon failure, this function returns 0, upon sucess it returns 1.
 ******************************************************************************/
-int read_pgm_image(char *infilename, unsigned char **image, int *rows,
-	int *cols)
+behavior read_pgm_image(in char *infilename, out unsigned char **image, out int *rows,
+	out int *cols)
+{
+int main(void)
 {
 	FILE *fp;
 	char buf[71];
@@ -615,7 +617,7 @@ int read_pgm_image(char *infilename, unsigned char **image, int *rows,
 	if (fp != stdin) fclose(fp);
 	return(1);
 }
-
+};
 /******************************************************************************
 * Function: write_pgm_image
 * Purpose: This function writes an image in PGM format. The file is either
