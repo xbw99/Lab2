@@ -67,8 +67,8 @@
 
 #define BOOSTBLURFACTOR 90.0
 
-behavior read_pgm_image(char *, unsigned char **, int *,
-	int *);
+int read_pgm_image(char *infilename, unsigned char **image, int *rows,
+	int *cols);
 int write_pgm_image(char *outfilename, unsigned char *image, int rows,
 	int cols, char *comment, int maxval);
 
@@ -89,37 +89,26 @@ double angle_radians(double x, double y);
 int non_max_supp(short int *magnitude, short int *delta_x, short int *delta_y, int rows,
 		int cols, unsigned char* nms);
 
-behavior Main(void)
+int main(int argc, char *argv[])
 {
-
 	char *infilename = 0;  /* Name of the input image */
-	unsigned char *image = 0;     /* The input image */
-	int rows = 0, cols = 0;           /* The dimensions of the image. */
-	float sigma = 0,              /* Standard deviation of the gaussian kernel. */
-		tlow = 0,               /* Fraction of the high threshold in hysteresis. */
-		thigh = 0;              /* High hysteresis threshold control. The actual
+	char *dirfilename = 0; /* Name of the output gradient direction image */
+	char outfilename[128];    /* Name of the output "edge" image */
+	char composedfname[128];  /* Name of the output "direction" image */
+	unsigned char *image;     /* The input image */
+	unsigned char *edge;      /* The output edge image */
+	int rows, cols;           /* The dimensions of the image. */
+	float sigma,              /* Standard deviation of the gaussian kernel. */
+		tlow,               /* Fraction of the high threshold in hysteresis. */
+		thigh;              /* High hysteresis threshold control. The actual
 							threshold is the (100 * thigh) percentage point
 							in the histogram of the magnitude of the
 							gradient image that passes non-maximal
 							suppression. */
-	unsigned char *edge = 0;      /* The output edge image */
-	char *dirfilename = 0; /* Name of the output gradient direction image */
-	char outfilename[128];    /* Name of the output "edge" image */
 
-	read_pgm_image 	reader(infilename, &image, &row, &cols);
-	canny 		cannyRunner(image, rows, cols, sigma, tlow, thigh, &edge, dirfilename);
-	write_pgm_image	writer(outfilename, edge, rows, cols, "", 255);
-
-	
-
-int main(int argc, char *argv[])
-{
-	
-	char composedfname[128];  /* Name of the output "direction" image */
-	
-	/****************************************************************************
-	* Get the command line arguments.
-	****************************************************************************/
+							/****************************************************************************
+							* Get the command line arguments.
+							****************************************************************************/
 	if (argc < 5) {
 		fprintf(stderr, "\n<USAGE> %s image sigma tlow thigh [writedirim]\n", argv[0]);
 		fprintf(stderr, "\n      image:      An image to process. Must be in ");
@@ -150,8 +139,7 @@ int main(int argc, char *argv[])
 	* Read in the image. This read function allocates memory for the image.
 	****************************************************************************/
 	if (VERBOSE) printf("Reading the image %s.\n", infilename);
-	int res_reader = reader.main();
-	if (res_reader == 0) {
+	if (read_pgm_image(infilename, &image, &rows, &cols) == 0) {
 		fprintf(stderr, "Error reading the input image, %s.\n", infilename);
 		exit(1);
 	}
@@ -160,12 +148,12 @@ int main(int argc, char *argv[])
 	* Perform the edge detection. All of the work takes place here.
 	****************************************************************************/
 	if (VERBOSE) printf("Starting Canny edge detection.\n");
-	if (dirfilename != 0) {
+	if (dirfilename != NULL) {
 		sprintf(composedfname, "%s_s_%3.2f_l_%3.2f_h_%3.2f.fim", infilename,
 			sigma, tlow, thigh);
 		dirfilename = composedfname;
 	}
-	cannyRunner.main();
+	canny(image, rows, cols, sigma, tlow, thigh, &edge, dirfilename);
 
 	/****************************************************************************
 	* Write out the edge image to a file.
@@ -173,21 +161,20 @@ int main(int argc, char *argv[])
 	sprintf(outfilename, "%s_s_%3.2f_l_%3.2f_h_%3.2f.pgm", infilename,
 		sigma, tlow, thigh);
 	if (VERBOSE) printf("Writing the edge iname in the file %s.\n", outfilename);
-	int res_writer = writer.main();
-	if (res_writer == 0) {
+	if (write_pgm_image(outfilename, edge, rows, cols, (char*)"", 255) == 0) {
 		fprintf(stderr, "Error writing the edge image, %s.\n", outfilename);
 		exit(1);
 	}
 	return 0;
 }
-};
+
 /*******************************************************************************
 * PROCEDURE: canny
 * PURPOSE: To perform canny edge detection.
 * NAME: Mike Heath
 * DATE: 2/15/96
 *******************************************************************************/
-behavior canny(unsigned char *image, int rows, int cols, float sigma,
+void canny(unsigned char *image, int rows, int cols, float sigma,
 	float tlow, float thigh, unsigned char **edge, char *fname)
 {
 	FILE *fpdir = 0;          /* File to write the gradient image to.     */
@@ -199,11 +186,10 @@ behavior canny(unsigned char *image, int rows, int cols, float sigma,
         
 	float *dir_radians = 0;   /* Gradient direction image.                */
 
-	/****************************************************************************
-	* Perform gaussian smoothing on the image using the input standard
-	* deviation.
-	****************************************************************************/
-
+								 /****************************************************************************
+								 * Perform gaussian smoothing on the image using the input standard
+								 * deviation.
+								 ****************************************************************************/
 	if (VERBOSE) printf("Smoothing the image using a gaussian kernel.\n");
 	gaussian_smooth(image, rows, cols, sigma, &smoothedim);
 
@@ -218,7 +204,7 @@ behavior canny(unsigned char *image, int rows, int cols, float sigma,
 	* to make the information available for computing an edge quality figure
 	* of merit.
 	****************************************************************************/
-	if (fname != 0) {
+	if (fname != NULL) {
 		/*************************************************************************
 		* Compute the direction up the gradient, in radians that are
 		* specified counteclockwise from the positive x-axis.
@@ -454,10 +440,9 @@ void gaussian_smooth(unsigned char *image, int rows, int cols, float sigma,
 		dot,            /* Dot product summing variable. */
 		sum;            /* Sum of the kernel weights variable. */
 
-	/****************************************************************************
-	* Create a 1-dimensional gaussian smoothing kernel.
-	****************************************************************************/
-
+						/****************************************************************************
+						* Create a 1-dimensional gaussian smoothing kernel.
+						****************************************************************************/
 	if (VERBOSE) printf("   Computing the gaussian smoothing kernel.\n");
 	make_gaussian_kernel(sigma, &kernel, &windowsize);
 	center = windowsize / 2;
@@ -465,7 +450,6 @@ void gaussian_smooth(unsigned char *image, int rows, int cols, float sigma,
 	/****************************************************************************
 	* Allocate a temporary buffer image and the smoothed image.
 	****************************************************************************/
-
 	if ((tempim = (float *)calloc(rows*cols, sizeof(float))) == NULL) {
 		fprintf(stderr, "Error allocating the buffer image.\n");
 		exit(1);
@@ -562,11 +546,8 @@ void make_gaussian_kernel(float sigma, float **kernel, int *windowsize)
 * All comments in the header are discarded in the process of reading the
 * image. Upon failure, this function returns 0, upon sucess it returns 1.
 ******************************************************************************/
-behavior read_pgm_image(in char *infilename, out unsigned char **image, out int *rows,
-	out int *cols)
-{
-	
-int main(void)
+int read_pgm_image(char *infilename, unsigned char **image, int *rows,
+	int *cols)
 {
 	FILE *fp;
 	char buf[71];
@@ -575,7 +556,7 @@ int main(void)
 	* Open the input image file for reading if a filename was given. If no
 	* filename was provided, set fp to read from standard input.
 	***************************************************************************/
-	if (infilename == 0) fp = stdin;
+	if (infilename == NULL) fp = stdin;
 	else {
 		if ((fp = fopen(infilename, "r")) == NULL) {
 			fprintf(stderr, "Error reading the file %s in read_pgm_image().\n",
@@ -599,16 +580,15 @@ int main(void)
 	sscanf(buf, "%d %d", cols, rows);
 	do { fgets(buf, 70, fp); } while (buf[0] == '#');  /* skip all comment lines */
 
-	/***************************************************************************
-	* Allocate memory to store the image then read the image from the file.
-	***************************************************************************/
-
+													   /***************************************************************************
+													   * Allocate memory to store the image then read the image from the file.
+													   ***************************************************************************/
 	if (((*image) = (unsigned char *)malloc((*rows)*(*cols))) == NULL) {
 		fprintf(stderr, "Memory allocation failure in read_pgm_image().\n");
 		if (fp != stdin) fclose(fp);
 		return(0);
 	}
-	if ((*rows) != fread((*image), (*cols), (*rows), fp)) {
+	if ((*rows) != (int)fread((*image), (*cols), (*rows), fp)) {
 		fprintf(stderr, "Error reading the image data in read_pgm_image().\n");
 		if (fp != stdin) fclose(fp);
 		free((*image));
@@ -618,7 +598,7 @@ int main(void)
 	if (fp != stdin) fclose(fp);
 	return(1);
 }
-};
+
 /******************************************************************************
 * Function: write_pgm_image
 * Purpose: This function writes an image in PGM format. The file is either
@@ -634,7 +614,7 @@ int write_pgm_image(char *outfilename, unsigned char *image, int rows,
 	* Open the output image file for writing if a filename was given. If no
 	* filename was provided, set fp to write to standard output.
 	***************************************************************************/
-	if (outfilename == 0) fp = stdout;
+	if (outfilename == NULL) fp = stdout;
 	else {
 		if ((fp = fopen(outfilename, "w")) == NULL) {
 			fprintf(stderr, "Error writing the file %s in write_pgm_image().\n",
@@ -647,14 +627,14 @@ int write_pgm_image(char *outfilename, unsigned char *image, int rows,
 	* Write the header information to the PGM file.
 	***************************************************************************/
 	fprintf(fp, "P5\n%d %d\n", cols, rows);
-	if (comment != 0)
+	if (comment != NULL)
 		if (strlen(comment) <= 70) fprintf(fp, "# %s\n", comment);
 	fprintf(fp, "%d\n", maxval);
 
 	/***************************************************************************
 	* Write the image data to the file.
 	***************************************************************************/
-	if (rows != fwrite(image, cols, rows, fp)) {
+	if (rows != (int)fwrite(image, cols, rows, fp)) {
 		fprintf(stderr, "Error writing the image data in write_pgm_image().\n");
 		if (fp != stdout) fclose(fp);
 		return(0);
@@ -837,11 +817,11 @@ int non_max_supp(short *mag, short *gradx, short *grady, int nrows, int ncols,
 	****************************************************************************/
 	for (rowcount = 1, magrowptr = mag + ncols + 1, gxrowptr = gradx + ncols + 1,
 		gyrowptr = grady + ncols + 1, resultrowptr = result + ncols + 1;
-		rowcount<=nrows - 2;
+		rowcount<nrows - 2;
 		rowcount++, magrowptr += ncols, gyrowptr += ncols, gxrowptr += ncols,
 		resultrowptr += ncols) {
 		for (colcount = 1, magptr = magrowptr, gxptr = gxrowptr, gyptr = gyrowptr,
-			resultptr = resultrowptr; colcount<=ncols - 2;
+			resultptr = resultrowptr; colcount<ncols - 2;
 			colcount++, magptr++, gxptr++, gyptr++, resultptr++) {
 			m00 = *magptr;
 			if (m00 == 0) {
