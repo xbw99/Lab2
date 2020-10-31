@@ -1,4 +1,3 @@
-
 /*******************************************************************************
 * --------------------------------------------
 *(c) 2001 University of South Florida, Tampa
@@ -73,37 +72,45 @@
 #define SIGMA 0.6
 #define TLOW 0.3
 #define THIGH 0.8
+#define SIZE ROWS*COLS
 #define WINSIZE 21
+unsigned char IMAGE[SIZE];
+unsigned char EDGES[SIZE];
+unsigned char NMS[SIZE];
+short int SMOOTHEDIM[SIZE];
+short int DELTA_X[SIZE];
+short int DELTA_Y[SIZE];
+short int MAGNITUDE[SIZE];
 
-int read_pgm_image(char *infilename, unsigned char image[ROWS*COLS], int *rows,
+int read_pgm_image(char *infilename, unsigned char **image, int *rows,
 	int *cols);
-int write_pgm_image(char *outfilename, unsigned char image[ROWS*COLS], int rows,
+int write_pgm_image(char *outfilename, unsigned char *image, int rows,
 	int cols, char *comment, int maxval);
 
-void canny(unsigned char image[ROWS*COLS], int rows, int cols, float sigma,
-	float tlow, float thigh, unsigned char edge[ROWS*COLS], char *fname);
-void gaussian_smooth(unsigned char image[ROWS*COLS], int rows, int cols, float sigma,
-	short int smoothedim[ROWS * COLS]);
-void make_gaussian_kernel(float sigma, float kernel[WINSIZE]);
-void derrivative_x_y(short int smoothedim[ROWS*COLS], int rows, int cols,
-	short int delta_x[ROWS*COLS], short int delta_y[ROWS*COLS]);
-void magnitude_x_y(short int delta_x[ROWS*COLS], short int delta_y[ROWS*COLS], int rows, int cols,
-	short int magnitude[ROWS*COLS]);
-void apply_hysteresis(short int mag[ROWS*COLS], unsigned char nms[ROWS*COLS], int rows, int cols,
-	float tlow, float thigh, unsigned char edge[ROWS*COLS]);
+void canny(unsigned char *image, int rows, int cols, float sigma,
+	float tlow, float thigh, unsigned char **edge, char *fname);
+void gaussian_smooth(unsigned char *image, int rows, int cols, float sigma,
+	short int **smoothedim);
+void make_gaussian_kernel(float sigma, float **kernel, int *windowsize);
+void derrivative_x_y(short int *smoothedim, int rows, int cols,
+	short int **delta_x, short int **delta_y);
+void magnitude_x_y(short int *delta_x, short int *delta_y, int rows, int cols,
+	short int **magnitude);
+void apply_hysteresis(short int *mag, unsigned char *nms, int rows, int cols,
+	float tlow, float thigh, unsigned char *edge);
 
-
-int non_max_supp(short int magnitude[ROWS*COLS], short int delta_x[ROWS*COLS], short int delta_y[ROWS*COLS], int rows,
-	int cols, unsigned char nms[ROWS*COLS]);
+int non_max_supp(short int *magnitude, short int *delta_x, short int *delta_y, int rows,
+	int cols, unsigned char* nms);
 
 int main(int argc, char *argv[])
 {
-	char *infilename = 0;  /* Name of the input image */
-	char *dirfilename = 0; /* Name of the output gradient direction image */
+	char *infilename = NULL;  /* Name of the input image */
+	char *dirfilename = NULL; /* Name of the output gradient direction image */
 	char outfilename[128];    /* Name of the output "edge" image */
 	char composedfname[128];  /* Name of the output "direction" image */
-	unsigned char image[ROWS*COLS];     /* The input image */
-	unsigned char edge[ROWS*COLS];      /* The output edge image */
+	
+	unsigned char *image = IMAGE;     /* The input image */
+	unsigned char *edge = EDGES;      /* The output edge image */
 	int rows, cols;           /* The dimensions of the image. */
 	float sigma,              /* Standard deviation of the gaussian kernel. */
 		tlow,               /* Fraction of the high threshold in hysteresis. */
@@ -117,20 +124,19 @@ int main(int argc, char *argv[])
 							* Get the command line arguments.
 							****************************************************************************/
 
-
 	infilename = "beachbus.pgm";
 	sigma = SIGMA;
 	tlow = TLOW;
 	thigh = THIGH;
 
 	if (argc == 6) dirfilename = infilename;
-	else dirfilename = 0;
+	else dirfilename = NULL;
 
 	/****************************************************************************
 	* Read in the image. This read function allocates memory for the image.
 	****************************************************************************/
 	if (VERBOSE) printf("Reading the image %s.\n", infilename);
-	if (read_pgm_image(infilename, image, &rows, &cols) == 0) {
+	if (read_pgm_image(infilename, &image, &rows, &cols) == 0) {
 		fprintf(stderr, "Error reading the input image, %s.\n", infilename);
 		exit(1);
 	}
@@ -138,29 +144,25 @@ int main(int argc, char *argv[])
 	/****************************************************************************
 	* Perform the edge detection. All of the work takes place here.
 	****************************************************************************/
-
 	if (VERBOSE) printf("Starting Canny edge detection.\n");
 	if (dirfilename != NULL) {
 		sprintf(composedfname, "%s_s_%3.2f_l_%3.2f_h_%3.2f.fim", infilename,
 			sigma, tlow, thigh);
 		dirfilename = composedfname;
 	}
-	canny(image, rows, cols, sigma, tlow, thigh, edge, dirfilename);
-	
-	
-	
+
+	canny(image, rows, cols, sigma, tlow, thigh, &edge, dirfilename);
+
 	/****************************************************************************
 	* Write out the edge image to a file.
 	****************************************************************************/
-	
 	sprintf(outfilename, "%s_s_%3.2f_l_%3.2f_h_%3.2f.pgm", infilename,
-	sigma, tlow, thigh);
+		sigma, tlow, thigh);
 	if (VERBOSE) printf("Writing the edge iname in the file %s.\n", outfilename);
 	if (write_pgm_image(outfilename, edge, rows, cols, "", 255) == 0) {
-	fprintf(stderr, "Error writing the edge image, %s.\n", outfilename);
-	exit(1);
+		fprintf(stderr, "Error writing the edge image, %s.\n", outfilename);
+		exit(1);
 	}
-	
 	return 0;
 }
 
@@ -170,16 +172,16 @@ int main(int argc, char *argv[])
 * NAME: Mike Heath
 * DATE: 2/15/96
 *******************************************************************************/
-void canny(unsigned char image[ROWS*COLS], int rows, int cols, float sigma,
-	float tlow, float thigh, unsigned char edge[ROWS*COLS], char *fname)
+void canny(unsigned char *image, int rows, int cols, float sigma,
+	float tlow, float thigh, unsigned char **edge, char *fname)
 {
-	
-	unsigned char nms[ROWS*COLS];        /* Points that are local maximal magnitude. */
-	short int smoothedim[ROWS*COLS];     /* The image after gaussian smoothing.      */
-	short int delta_x[ROWS*COLS];        /* The first devivative image, x-direction. */
-	short int delta_y[ROWS*COLS];        /* The first derivative image, y-direction. */
-	short int magnitude[ROWS*COLS];      /* The magnitude of the gadient image.      */
+	unsigned char *nms = NMS;        /* Points that are local maximal magnitude. */
+	short int *smoothedim = SMOOTHEDIM,     /* The image after gaussian smoothing.      */
+		*delta_x = DELTA_X,        /* The first devivative image, x-direction. */
+		*delta_y = DELTA_Y,        /* The first derivative image, y-direction. */
+		*magnitude = MAGNITUDE;      /* The magnitude of the gadient image.      */
 
+	
 
 								 /****************************************************************************
 								 * Perform gaussian smoothing on the image using the input standard
@@ -187,34 +189,49 @@ void canny(unsigned char image[ROWS*COLS], int rows, int cols, float sigma,
 								 ****************************************************************************/
 
 	if (VERBOSE) printf("Smoothing the image using a gaussian kernel.\n");
-	gaussian_smooth(image, rows, cols, sigma, smoothedim);
+	gaussian_smooth(image, rows, cols, sigma, &smoothedim);
 
 	/****************************************************************************
 	* Compute the first derivative in the x and y directions.
 	****************************************************************************/
 	if (VERBOSE) printf("Computing the X and Y first derivatives.\n");
-	derrivative_x_y(smoothedim, rows, cols, delta_x, delta_y);
-		
+	derrivative_x_y(smoothedim, rows, cols, &delta_x, &delta_y);
+
+	/****************************************************************************
+	* This option to write out the direction of the edge gradient was added
+	* to make the information available for computing an edge quality figure
+	* of merit.
+	****************************************************************************/
+
 
 	/****************************************************************************
 	* Compute the magnitude of the gradient.
 	****************************************************************************/
-	
 	if (VERBOSE) printf("Computing the magnitude of the gradient.\n");
-	magnitude_x_y(delta_x, delta_y, rows, cols, magnitude);
+	magnitude_x_y(delta_x, delta_y, rows, cols, &magnitude);
 
 	/****************************************************************************
 	* Perform non-maximal suppression.
 	****************************************************************************/
 	if (VERBOSE) printf("Doing the non-maximal suppression.\n");
+	
+
 	non_max_supp(magnitude, delta_x, delta_y, rows, cols, nms);
 
 	/****************************************************************************
 	* Use hysteresis to mark the edge pixels.
 	****************************************************************************/
-	if (VERBOSE) printf("Doing hysteresis thresholding.\n");	
-	apply_hysteresis(magnitude, nms, rows, cols, tlow, thigh, edge);
+	if (VERBOSE) printf("Doing hysteresis thresholding.\n");
+	
 
+	apply_hysteresis(magnitude, nms, rows, cols, tlow, thigh, *edge);
+
+	/****************************************************************************
+	* Free all of the memory that we allocated except for the edge image that
+	* is still being used to store out result.
+	****************************************************************************/
+	
+	
 	
 }
 
@@ -226,8 +243,8 @@ void canny(unsigned char image[ROWS*COLS], int rows, int cols, float sigma,
 * NAME: Mike Heath
 * DATE: 2/15/96
 *******************************************************************************/
-void magnitude_x_y(short int delta_x[ROWS*COLS], short int delta_y[ROWS*COLS], int rows, int cols,
-	short int magnitude[ROWS*COLS])
+void magnitude_x_y(short int *delta_x, short int *delta_y, int rows, int cols,
+	short int **magnitude)
 {
 	int r, c, pos, sq1, sq2;
 
@@ -240,7 +257,7 @@ void magnitude_x_y(short int delta_x[ROWS*COLS], short int delta_y[ROWS*COLS], i
 		for (c = 0; c<cols; c++, pos++) {
 			sq1 = (int)delta_x[pos] * (int)delta_x[pos];
 			sq2 = (int)delta_y[pos] * (int)delta_y[pos];
-			magnitude[pos] = (short)(0.5 + sqrt((float)sq1 + (float)sq2));
+			(*magnitude)[pos] = (short)(0.5 + sqrt((float)sq1 + (float)sq2));
 		}
 	}
 
@@ -258,15 +275,15 @@ void magnitude_x_y(short int delta_x[ROWS*COLS], short int delta_y[ROWS*COLS], i
 * NAME: Mike Heath
 * DATE: 2/15/96
 *******************************************************************************/
-void derrivative_x_y(short int smoothedim[ROWS*COLS], int rows, int cols,
-	short int delta_x[ROWS*COLS], short int delta_y[ROWS*COLS])
+void derrivative_x_y(short int *smoothedim, int rows, int cols,
+	short int **delta_x, short int **delta_y)
 {
 	int r, c, pos;
 
 	/****************************************************************************
 	* Allocate images to store the derivatives.
 	****************************************************************************/
-
+	
 
 	/****************************************************************************
 	* Compute the x-derivative. Adjust the derivative at the borders to avoid
@@ -275,12 +292,12 @@ void derrivative_x_y(short int smoothedim[ROWS*COLS], int rows, int cols,
 	if (VERBOSE) printf("   Computing the X-direction derivative.\n");
 	for (r = 0; r<rows; r++) {
 		pos = r * cols;
-		delta_x[pos] = smoothedim[pos + 1] - smoothedim[pos];
+		(*delta_x)[pos] = smoothedim[pos + 1] - smoothedim[pos];
 		pos++;
 		for (c = 1; c<(cols - 1); c++, pos++) {
-			delta_x[pos] = smoothedim[pos + 1] - smoothedim[pos - 1];
+			(*delta_x)[pos] = smoothedim[pos + 1] - smoothedim[pos - 1];
 		}
-		delta_x[pos] = smoothedim[pos] - smoothedim[pos - 1];
+		(*delta_x)[pos] = smoothedim[pos] - smoothedim[pos - 1];
 	}
 
 	/****************************************************************************
@@ -290,12 +307,12 @@ void derrivative_x_y(short int smoothedim[ROWS*COLS], int rows, int cols,
 	if (VERBOSE) printf("   Computing the Y-direction derivative.\n");
 	for (c = 0; c<cols; c++) {
 		pos = c;
-		delta_y[pos] = smoothedim[pos + cols] - smoothedim[pos];
+		(*delta_y)[pos] = smoothedim[pos + cols] - smoothedim[pos];
 		pos += cols;
 		for (r = 1; r<(rows - 1); r++, pos += cols) {
-			delta_y[pos] = smoothedim[pos + cols] - smoothedim[pos - cols];
+			(*delta_y)[pos] = smoothedim[pos + cols] - smoothedim[pos - cols];
 		}
-		delta_y[pos] = smoothedim[pos] - smoothedim[pos - cols];
+		(*delta_y)[pos] = smoothedim[pos] - smoothedim[pos - cols];
 	}
 }
 
@@ -305,14 +322,15 @@ void derrivative_x_y(short int smoothedim[ROWS*COLS], int rows, int cols,
 * NAME: Mike Heath
 * DATE: 2/15/96
 *******************************************************************************/
-void gaussian_smooth(unsigned char image[ROWS*COLS], int rows, int cols, float sigma,
-	short int smoothedim[ROWS * COLS])
+void gaussian_smooth(unsigned char *image, int rows, int cols, float sigma,
+	short int **smoothedim)
 {
 	int r, c, rr, cc,     /* Counter variables. */
-		windowsize = WINSIZE,
+		windowsize,        /* Dimension of the gaussian kernel. */
 		center;            /* Half of the windowsize. */
-	float tempim[ROWS * COLS],        /* Buffer for separable filter gaussian smoothing. */
-		kernel[WINSIZE],        /* A one dimensional gaussian kernel. */
+	float TEMPIM[SIZE], KERNEL[WINSIZE];
+	float *tempim = TEMPIM,        /* Buffer for separable filter gaussian smoothing. */
+		*kernel = KERNEL,        /* A one dimensional gaussian kernel. */
 		dot,            /* Dot product summing variable. */
 		sum;            /* Sum of the kernel weights variable. */
 
@@ -321,13 +339,12 @@ void gaussian_smooth(unsigned char image[ROWS*COLS], int rows, int cols, float s
 						****************************************************************************/
 
 	if (VERBOSE) printf("   Computing the gaussian smoothing kernel.\n");
-	make_gaussian_kernel(sigma, kernel);
+	make_gaussian_kernel(sigma, &kernel, &windowsize);
 	center = windowsize / 2;
 
 	/****************************************************************************
 	* Allocate a temporary buffer image and the smoothed image.
 	****************************************************************************/
-	
 	
 
 	/****************************************************************************
@@ -362,7 +379,7 @@ void gaussian_smooth(unsigned char image[ROWS*COLS], int rows, int cols, float s
 					sum += kernel[center + rr];
 				}
 			}
-			smoothedim[r*cols + c] = (short int)(dot*BOOSTBLURFACTOR / sum + 0.5);
+			(*smoothedim)[r*cols + c] = (short int)(dot*BOOSTBLURFACTOR / sum + 0.5);
 		}
 	}
 
@@ -375,30 +392,30 @@ void gaussian_smooth(unsigned char image[ROWS*COLS], int rows, int cols, float s
 * NAME: Mike Heath
 * DATE: 2/15/96
 *******************************************************************************/
-void make_gaussian_kernel(float sigma, float kernel[WINSIZE])
+void make_gaussian_kernel(float sigma, float **kernel, int *windowsize)
 {
 	int i, center;
 	float x, fx, sum = 0.0;
 
-	
-	center = WINSIZE / 2;
+	*windowsize = 1 + 2 * ceil(2.5 * sigma);
+	center = (*windowsize) / 2;
 
-	if (VERBOSE) printf("      The kernel has %d elements.\n", WINSIZE);
+	if (VERBOSE) printf("      The kernel has %d elements.\n", *windowsize);
 	
 
-	for (i = 0; i<(WINSIZE); i++) {
+	for (i = 0; i<(*windowsize); i++) {
 		x = (float)(i - center);
 		fx = pow(2.71828, -0.5*x*x / (sigma*sigma)) / (sigma * sqrt(6.2831853));
-		kernel[i] = fx;
+		(*kernel)[i] = fx;
 		sum += fx;
 	}
 
-	for (i = 0; i<WINSIZE; i++) kernel[i] /= sum;
+	for (i = 0; i<(*windowsize); i++) (*kernel)[i] /= sum;
 
 	if (VERBOSE) {
 		printf("The filter coefficients are:\n");
-		for (i = 0; i<WINSIZE; i++)
-			printf("kernel[%d] = %f\n", i, kernel[i]);
+		for (i = 0; i<(*windowsize); i++)
+			printf("kernel[%d] = %f\n", i, (*kernel)[i]);
 	}
 }
 
@@ -413,7 +430,7 @@ void make_gaussian_kernel(float sigma, float kernel[WINSIZE])
 * image. Upon failure, this function returns 0, upon sucess it returns 1.
 ******************************************************************************/
 
-int read_pgm_image(char *infilename, unsigned char image[ROWS*COLS], int *rows,
+int read_pgm_image(char *infilename, unsigned char **image, int *rows,
 	int *cols)
 {
 	FILE *fp;
@@ -452,10 +469,10 @@ int read_pgm_image(char *infilename, unsigned char image[ROWS*COLS], int *rows,
 													   ***************************************************************************/
 
 	
-	for (int i = 0; i < *rows; i++) {
-		for (int j = 0; j < *cols; j++) {
-			fscanf(fp, "%c", &image[i * (*cols) + j]);
-		}
+	if ((*rows) != fread((*image), (*cols), (*rows), fp)) {
+		fprintf(stderr, "Error reading the image data in read_pgm_image().\n");
+		if (fp != stdin) fclose(fp);
+		return(0);
 	}
 
 	if (fp != stdin) fclose(fp);
@@ -468,7 +485,7 @@ int read_pgm_image(char *infilename, unsigned char image[ROWS*COLS], int *rows,
 * written to the file specified by outfilename or to standard output if
 * outfilename = NULL. A comment can be written to the header if coment != NULL.
 ******************************************************************************/
-int write_pgm_image(char *outfilename, unsigned char image[ROWS*COLS], int rows,
+int write_pgm_image(char *outfilename, unsigned char *image, int rows,
 	int cols, char *comment, int maxval)
 {
 	FILE *fp;
@@ -497,10 +514,10 @@ int write_pgm_image(char *outfilename, unsigned char image[ROWS*COLS], int rows,
 	/***************************************************************************
 	* Write the image data to the file.
 	***************************************************************************/
-	for (int i = 0; i < rows; i++) {
-		for (int j = 0; j < cols; j++) {
-			fprintf(fp, "%c", image[i * cols + j]);
-		}
+	if (rows != fwrite(image, cols, rows, fp)) {
+		fprintf(stderr, "Error writing the image data in write_pgm_image().\n");
+		if (fp != stdout) fclose(fp);
+		return(0);
 	}
 
 	if (fp != stdout) fclose(fp);
@@ -544,8 +561,8 @@ int follow_edges(unsigned char *edgemapptr, short *edgemagptr, short lowval,
 * NAME: Mike Heath
 * DATE: 2/15/96
 *******************************************************************************/
-void apply_hysteresis(short int mag[ROWS*COLS], unsigned char nms[ROWS*COLS], int rows, int cols,
-	float tlow, float thigh, unsigned char edge[ROWS*COLS])
+void apply_hysteresis(short int *mag, unsigned char *nms, int rows, int cols,
+	float tlow, float thigh, unsigned char *edge)
 {
 	int r, c, pos, numedges, highcount, lowthreshold, highthreshold,
 		hist[32768];
@@ -651,8 +668,8 @@ void apply_hysteresis(short int mag[ROWS*COLS], unsigned char nms[ROWS*COLS], in
 * DATE: 2/15/96
 *******************************************************************************/
 
-int non_max_supp(short int mag[ROWS*COLS], short int gradx[ROWS*COLS], short int grady[ROWS*COLS], int nrows, int ncols,
-	unsigned char result[ROWS*COLS])
+int non_max_supp(short int *mag, short int *gradx, short int *grady, int nrows, int ncols,
+	unsigned char *result)
 {
 	int rowcount, colcount, count;
 	short *magrowptr, *magptr;
@@ -681,11 +698,11 @@ int non_max_supp(short int mag[ROWS*COLS], short int gradx[ROWS*COLS], short int
 	****************************************************************************/
 	for (rowcount = 1, magrowptr = mag + ncols + 1, gxrowptr = gradx + ncols + 1,
 		gyrowptr = grady + ncols + 1, resultrowptr = result + ncols + 1;
-		rowcount<=nrows - 2;
+		rowcount<nrows - 2;
 		rowcount++, magrowptr += ncols, gyrowptr += ncols, gxrowptr += ncols,
 		resultrowptr += ncols) {
 		for (colcount = 1, magptr = magrowptr, gxptr = gxrowptr, gyptr = gyrowptr,
-			resultptr = resultrowptr; colcount<=ncols - 2;
+			resultptr = resultrowptr; colcount<ncols - 2;
 			colcount++, magptr++, gxptr++, gyptr++, resultptr++) {
 			m00 = *magptr;
 			if (m00 == 0) {
