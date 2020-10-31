@@ -124,7 +124,7 @@ int main(int argc, char *argv[])
 							* Get the command line arguments.
 							****************************************************************************/
 
-	infilename = "beachbus.pgm";
+	infilename = argv[1];
 	sigma = SIGMA;
 	tlow = TLOW;
 	thigh = THIGH;
