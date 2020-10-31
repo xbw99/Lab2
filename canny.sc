@@ -104,8 +104,8 @@ int non_max_supp(short int *magnitude, short int *delta_x, short int *delta_y, i
 
 int main(int argc, char *argv[])
 {
-	char *infilename = NULL;  /* Name of the input image */
-	char *dirfilename = NULL; /* Name of the output gradient direction image */
+	char *infilename = 0;  /* Name of the input image */
+	char *dirfilename = 0; /* Name of the output gradient direction image */
 	char outfilename[128];    /* Name of the output "edge" image */
 	char composedfname[128];  /* Name of the output "direction" image */
 	
@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
 	thigh = THIGH;
 
 	if (argc == 6) dirfilename = infilename;
-	else dirfilename = NULL;
+	else dirfilename = 0;
 
 	/****************************************************************************
 	* Read in the image. This read function allocates memory for the image.
